@@ -12,6 +12,11 @@ if (!BOT_TOKEN) {
   console.error('XATOLIK: .env faylida BOT_TOKEN ko\'rsatilmagan.');
   process.exit(1);
 }
+const maskedToken = BOT_TOKEN.length > 8
+  ? BOT_TOKEN.slice(0, 4) + '...' + BOT_TOKEN.slice(-4)
+  : '???';
+console.log('DIAGNOSTIKA: BOT_TOKEN o\'rnatilgan = HA, uzunligi =', BOT_TOKEN.length + ',', 'token =', maskedToken);
+console.log('DIAGNOSTIKA: API_BASE_URL =', process.env.API_BASE_URL);
 
 const bot = new Telegraf(BOT_TOKEN);
 
