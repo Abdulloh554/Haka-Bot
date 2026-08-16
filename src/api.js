@@ -1,24 +1,13 @@
 const axios = require('axios');
 
 const BASE_URL = process.env.API_BASE_URL || 'https://ustachibackend.onrender.com';
+const BOT_TOKEN = process.env.BOT_TOKEN || '';
 
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
-
-/**
- * ====================================================================
- * MUHIM: Bu faylda ishlatilgan endpoint manzillari — frontend/backend
- * hujjatida aniq YOZILMAGAN, shuning uchun taxminiy (REST/DRF konventsiyasi
- * bo'yicha, /api/health/ namunasidan kelib chiqib) qo'yilgan.
- *
- * Haqiqiy hujjat (Swagger/Postman) kelganda FAQAT shu fayldagi
- * url manzillarini va response maydonlarini tuzating — boshqa
- * hech qanday faylga tegishning hojati yo'q.
- * ====================================================================
- */
 
 // Telegram chatId'ni tizimdagi foydalanuvchi (telefon raqami) bilan bog'laydi.
 // Kutilayotgan javob: { role: 'customer' | 'staff' | 'owner', userId, name }
@@ -30,22 +19,29 @@ async function linkTelegramAccount({ telegramChatId, phone }) {
   return data;
 }
 
-// --- MIJOZ ---
+// Bot xizmatlari uchun maxsus sarlavha (backenda ixtiyoriy tekshiriladi)
+function botHeaders() {
+  return BOT_TOKEN ? { 'x-bot-token': BOT_TOKEN } : {};
+}
 
-// Yangi buyurtma yaratadi. Kutilayotgan javob: { queueNumber, estimatedTime, orderId }
-async function createOrder({ telegramChatId, serviceType }) {
-  const { data } = await client.post('/api/orders/', {
-    telegramChatId,
-    serviceType,
-  });
+// Ustaxonaning faol xizmatlari: { services: [{ id, name, price, ... }] }
+async function getServices() {
+  const { data } = await client.get('/api/bot/services/');
   return data;
 }
 
-// Mijozning hozirgi faol buyurtmasini qaytaradi (yo'q bo'lsa null/404)
-async function getActiveOrder({ telegramChatId }) {
+// Yangi buyurtma yaratadi. Kutilayotgan javob: orderSerializer (id, queue_number, status, ...)
+async function createOrder({ telegram_chat_id, service_id, description }) {
+  const { data } = await client.post('/api/bot/orders/', { telegram_chat_id, service_id, description }, { headers: botHeaders() });
+  return data;
+}
+
+// Mijozning hozirgi faol buyurtmasi (yo'q bo'lsa null)
+async function getActiveOrder({ telegram_chat_id }) {
   try {
-    const { data } = await client.get('/api/orders/active/', {
-      params: { telegramChatId },
+    const { data } = await client.get('/api/bot/orders/active/', {
+      params: { telegram_chat_id },
+      headers: botHeaders(),
     });
     return data;
   } catch (err) {
@@ -55,41 +51,41 @@ async function getActiveOrder({ telegramChatId }) {
 }
 
 // Faol buyurtmani bekor qiladi
-async function cancelActiveOrder({ telegramChatId }) {
-  const { data } = await client.post('/api/orders/cancel/', { telegramChatId });
+async function cancelActiveOrder({ telegram_chat_id }) {
+  const { data } = await client.post('/api/bot/orders/cancel/', { telegram_chat_id }, { headers: botHeaders() });
   return data;
 }
 
-// --- USTA (STAFF) ---
-
-// Bugungi tayinlangan vazifalar ro'yxati
-async function getTodayTasks({ telegramChatId }) {
-  const { data } = await client.get('/api/staff/today/', {
-    params: { telegramChatId },
+// Xodimning bugungi tayinlangan vazifalari: { active_orders: [...] }
+async function getTodayTasks({ telegram_chat_id }) {
+  const { data } = await client.get('/api/bot/staff/today/', {
+    params: { telegram_chat_id },
+    headers: botHeaders(),
   });
-  return data; // kutilgan: [{ orderId, customerName, service, time, status }]
+  return data;
 }
 
-// --- EGA (OWNER) ---
-
-// Bugungi qisqa hisobot
-async function getDailyReport({ telegramChatId }) {
-  const { data } = await client.get('/api/reports/daily/', {
-    params: { telegramChatId },
+// Ega uchun bugungi hisobot + kam qolgan ombor
+async function getDailyReport({ telegram_chat_id }) {
+  const { data } = await client.get('/api/bot/report/daily/', {
+    params: { telegram_chat_id },
+    headers: botHeaders(),
   });
-  return data; // kutilgan: { revenue, ordersCount, busyStaff, freeStaff }
+  return data;
 }
 
 // Kam qolgan ombor mahsulotlari
-async function getLowStockItems({ telegramChatId }) {
-  const { data } = await client.get('/api/inventory/low-stock/', {
-    params: { telegramChatId },
+async function getLowStockItems({ telegram_chat_id }) {
+  const { data } = await client.get('/api/bot/inventory/low/', {
+    params: { telegram_chat_id },
+    headers: botHeaders(),
   });
-  return data; // kutilgan: [{ name, quantity, threshold }]
+  return data.lowStock || [];
 }
 
 module.exports = {
   linkTelegramAccount,
+  getServices,
   createOrder,
   getActiveOrder,
   cancelActiveOrder,

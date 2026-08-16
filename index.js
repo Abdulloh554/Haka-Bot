@@ -2,9 +2,9 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const api = require('./src/api');
 const { saveLinkedUser, getLinkedUser } = require('./src/localdb');
-const { registerCustomerHandlers } = require('./src/customer');
-const { registerStaffHandlers } = require('./src/staff');
-const { registerOwnerHandlers } = require('./src/owner');
+const { registerCustomerHandlers, customerMenuKeyboard } = require('./src/customer');
+const { registerStaffHandlers, staffMenuKeyboard } = require('./src/staff');
+const { registerOwnerHandlers, ownerMenuKeyboard } = require('./src/owner');
 const { startNotifyServer } = require('./src/notifyServer');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -15,29 +15,30 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
+function menuKeyboard(role) {
+  if (role === 'customer') return customerMenuKeyboard();
+  if (role === 'staff') return staffMenuKeyboard();
+  if (role === 'owner') return ownerMenuKeyboard();
+  return null;
+}
+
 function roleMenuText(role, name) {
   const greeting = name ? `Salom, ${name}!` : 'Salom!';
   if (role === 'customer') {
-    return (
-      `${greeting}\n\n` +
-      `📌 Mavjud buyruqlar:\n` +
-      `/order — yangi buyurtma berish\n` +
-      `/status — buyurtmangiz holatini ko'rish\n` +
-      `/cancel — faol buyurtmani bekor qilish`
-    );
+    return `${greeting}\n\nSizga qanday yordam bera olamiz? 👇`;
   }
   if (role === 'staff') {
-    return `${greeting}\n\n📌 Mavjud buyruqlar:\n/today — bugungi vazifalaringiz`;
+    return `${greeting}\n\nBugungi vazifalaringizni ko'rish uchun tugmani bosing 👇`;
   }
   if (role === 'owner') {
-    return (
-      `${greeting}\n\n` +
-      `📌 Mavjud buyruqlar:\n` +
-      `/report — bugungi hisobot\n` +
-      `/inventory — kam qolgan mahsulotlar`
-    );
+    return `${greeting}\n\nUstaxona boshqaruvi bo'limini tanlang 👇`;
   }
   return `${greeting}\n\nHisobingiz turi aniqlanmadi.`;
+}
+
+function sendMenu(ctx, role, name) {
+  const keyboard = menuKeyboard(role);
+  return ctx.reply(roleMenuText(role, name), keyboard ? { ...keyboard } : undefined);
 }
 
 // ---- /start: kontakt so'rash orqali bog'lash ----
@@ -45,7 +46,7 @@ function roleMenuText(role, name) {
 bot.start(async (ctx) => {
   const existing = getLinkedUser(ctx.from.id);
   if (existing) {
-    await ctx.reply(roleMenuText(existing.role, existing.name));
+    await sendMenu(ctx, existing.role, existing.name);
     return;
   }
 
@@ -80,7 +81,7 @@ bot.on('contact', async (ctx) => {
     });
 
     await ctx.reply('✅ Muvaffaqiyatli bog\'landi!', Markup.removeKeyboard());
-    await ctx.reply(roleMenuText(result.role, result.name || ctx.from.first_name));
+    await sendMenu(ctx, result.role, result.name || ctx.from.first_name);
   } catch (err) {
     console.error('linkTelegramAccount xatolik:', err.message);
     await ctx.reply(
@@ -97,7 +98,7 @@ bot.command('menu', async (ctx) => {
     await ctx.reply("Avval /start orqali ro'yxatdan o'ting.");
     return;
   }
-  await ctx.reply(roleMenuText(user.role, user.name));
+  await sendMenu(ctx, user.role, user.name);
 });
 
 // ---- Rol bo'yicha komandalarni ro'yxatdan o'tkazish ----

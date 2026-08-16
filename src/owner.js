@@ -1,23 +1,32 @@
+const { Markup } = require('telegraf');
 const api = require('./api');
 const { getLinkedUser } = require('./localdb');
+
+function ownerMenuKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('📊 Bugungi hisobot', 'menu_report')],
+    [Markup.button.callback('📦 Kam qolgan mahsulotlar', 'menu_inventory')],
+  ]);
+}
 
 async function handleReportCommand(ctx) {
   const user = getLinkedUser(ctx.from.id);
   if (!user || user.role !== 'owner') {
-    await ctx.reply("Bu buyruq faqat ustaxona egasi uchun. Avval /start orqali bog'laning.");
+    await ctx.reply("Bu bo'lim faqat ustaxona egasi uchun. Avval /start orqali bog'laning.");
     return;
   }
 
   try {
-    const report = await api.getDailyReport({ telegramChatId: ctx.from.id });
+    const report = await api.getDailyReport({ telegram_chat_id: ctx.from.id });
 
     await ctx.reply(
       `📊 *Bugungi hisobot*\n\n` +
-        `💰 Tushum: ${report.revenue ?? 0} so'm\n` +
+        `💰 Tushum: ${Number(report.revenue ?? 0).toLocaleString('ru-RU')} so'm\n` +
         `📦 Buyurtmalar soni: ${report.ordersCount ?? 0}\n` +
-        `🟢 Band ustalar: ${report.busyStaff ?? 0}\n` +
-        `⚪ Bo'sh ustalar: ${report.freeStaff ?? 0}`,
-      { parse_mode: 'Markdown' }
+        `✅ Bajarilgan: ${report.completedCount ?? 0}\n` +
+        `🟢 Bo'sh ustalar: ${report.freeStaff ?? 0}\n` +
+        `🔴 Band ustalar: ${report.busyStaff ?? 0}`,
+      { parse_mode: 'Markdown', ...ownerMenuKeyboard() }
     );
   } catch (err) {
     console.error('getDailyReport xatolik:', err.message);
@@ -28,15 +37,15 @@ async function handleReportCommand(ctx) {
 async function handleInventoryCommand(ctx) {
   const user = getLinkedUser(ctx.from.id);
   if (!user || user.role !== 'owner') {
-    await ctx.reply("Bu buyruq faqat ustaxona egasi uchun. Avval /start orqali bog'laning.");
+    await ctx.reply("Bu bo'lim faqat ustaxona egasi uchun. Avval /start orqali bog'langan.");
     return;
   }
 
   try {
-    const items = await api.getLowStockItems({ telegramChatId: ctx.from.id });
+    const items = await api.getLowStockItems({ telegram_chat_id: ctx.from.id });
 
     if (!items || items.length === 0) {
-      await ctx.reply('✅ Omborda hozircha kam qolgan mahsulot yo\'q.');
+      await ctx.reply("✅ Omborda hozircha kam qolgan mahsulot yo'q.", ownerMenuKeyboard());
       return;
     }
 
@@ -44,7 +53,10 @@ async function handleInventoryCommand(ctx) {
       .map((it) => `⚠️ ${it.name} — qoldiq: ${it.quantity} (chegara: ${it.threshold})`)
       .join('\n');
 
-    await ctx.reply(`📦 *Kam qolgan mahsulotlar:*\n\n${text}`, { parse_mode: 'Markdown' });
+    await ctx.reply(`📦 *Kam qolgan mahsulotlar:*\n\n${text}`, {
+      parse_mode: 'Markdown',
+      ...ownerMenuKeyboard(),
+    });
   } catch (err) {
     console.error('getLowStockItems xatolik:', err.message);
     await ctx.reply("⚠️ Ombor ma'lumotini olishda muammo. Qayta urinib ko'ring.");
@@ -54,6 +66,8 @@ async function handleInventoryCommand(ctx) {
 function registerOwnerHandlers(bot) {
   bot.command('report', handleReportCommand);
   bot.command('inventory', handleInventoryCommand);
+  bot.action(/^menu_report$/, handleReportCommand);
+  bot.action(/^menu_inventory$/, handleInventoryCommand);
 }
 
-module.exports = { registerOwnerHandlers };
+module.exports = { registerOwnerHandlers, ownerMenuKeyboard };
