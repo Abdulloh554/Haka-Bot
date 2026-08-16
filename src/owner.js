@@ -19,15 +19,20 @@ async function handleReportCommand(ctx) {
   try {
     const report = await api.getDailyReport({ telegram_chat_id: ctx.from.id });
 
-    await ctx.reply(
+    const base =
       `📊 *Bugungi hisobot*\n\n` +
-        `💰 Tushum: ${Number(report.revenue ?? 0).toLocaleString('ru-RU')} so'm\n` +
-        `📦 Buyurtmalar soni: ${report.ordersCount ?? 0}\n` +
-        `✅ Bajarilgan: ${report.completedCount ?? 0}\n` +
-        `🟢 Bo'sh ustalar: ${report.freeStaff ?? 0}\n` +
-        `🔴 Band ustalar: ${report.busyStaff ?? 0}`,
-      { parse_mode: 'Markdown', ...ownerMenuKeyboard() }
-    );
+      `💰 Tushum: ${Number(report.revenue ?? 0).toLocaleString('ru-RU')} so'm\n` +
+      `📦 Buyurtmalar soni: ${report.ordersCount ?? 0}\n` +
+      `✅ Bajarilgan: ${report.completedCount ?? 0}\n` +
+      `🟢 Bo'sh ustalar: ${report.freeStaff ?? 0}\n` +
+      `🔴 Band ustalar: ${report.busyStaff ?? 0}`;
+
+    const ai = report.ai_summary;
+    const aiLine = ai && ai.summary
+      ? `\n\n🧠 *AI xulosa:*\n${ai.summary}\n\n💡 *Tavsiya:*\n${ai.recommendation || ''}`
+      : '';
+
+    await ctx.reply(base + aiLine, { parse_mode: 'Markdown', ...ownerMenuKeyboard() });
   } catch (err) {
     console.error('getDailyReport xatolik:', err.message);
     await ctx.reply("⚠️ Hisobotni olishda muammo. Qayta urinib ko'ring.");

@@ -36,6 +36,13 @@ async function createOrder({ telegram_chat_id, service_id, description }) {
   return data;
 }
 
+// Erkin matn asosida AI tasniflashi orqali buyurtma yaratadi.
+// Javob: orderSerializer | { needs_clarification, question } | { manual_required }
+async function createOrderFromText({ telegram_chat_id, text }) {
+  const { data } = await client.post('/api/bot/orders/from_text/', { telegram_chat_id, text }, { headers: botHeaders() });
+  return data;
+}
+
 // Mijozning hozirgi faol buyurtmasi (yo'q bo'lsa null)
 async function getActiveOrder({ telegram_chat_id }) {
   try {
@@ -87,6 +94,7 @@ module.exports = {
   linkTelegramAccount,
   getServices,
   createOrder,
+  createOrderFromText,
   getActiveOrder,
   cancelActiveOrder,
   getTodayTasks,

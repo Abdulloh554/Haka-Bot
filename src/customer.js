@@ -25,6 +25,7 @@ function requireLinked(ctx) {
 function customerMenuKeyboard() {
   return Markup.inlineKeyboard([
     [Markup.button.callback('🛠️ Buyurtma berish', 'menu_order')],
+    [Markup.button.callback('✍️ Muammoni yozish', 'menu_describe')],
     [Markup.button.callback('📋 Holatni ko\'rish', 'menu_status')],
     [Markup.button.callback('❌ Buyurtmani bekor qilish', 'menu_cancel')],
   ]);
@@ -128,14 +129,100 @@ async function handleCancelCommand(ctx) {
   }
 }
 
+const URGENCY_LABELS = {
+  past: 'Past',
+  "o'rta": "O'rta",
+  yuqori: 'Yuqori',
+};
+
+// "Muammoni yozish" tugmasi — mijozga erkin matn yozishni tushuntiradi
+async function handleDescribeCommand(ctx) {
+  await ctx.answerCbQuery().catch(() => {});
+  await ctx.reply(
+    "✍️ Muammoingizni oddiy so'zlar bilan yozib yuboring, masalan:\n\n" +
+      "«kranimdan suv tomchilayapti, ertaga kelib qarang»\n\n" +
+      "Biz xabarni tushunib, buyurtmani avtomatik rasmiylashtiramiz."
+  );
+}
+
+// Erkin matn -> AI tasnifi -> avtomatik buyurtma (yoki aniqlashtiruvchi savol)
+async function handleFreeText(ctx) {
+  const user = requireLinked(ctx);
+  if (!user || user.role !== 'customer') return;
+  const text = (ctx.message.text || '').trim();
+  if (!text || text.startsWith('/')) return;
+
+  let progress = null;
+  try {
+    progress = await ctx.reply('🤔 Tushunyapman, biroz kuting...');
+  } catch (err) {
+    console.error('progress xabar yuborish xatosi:', err.message);
+  }
+
+  const sendResult = async (msg, keyboard) => {
+    const opts = keyboard ? { ...keyboard } : undefined;
+    if (progress) {
+      try {
+        await ctx.telegram.editMessageText(ctx.chat.id, progress.message_id, undefined, msg, opts);
+        return;
+      } catch (err) {
+        console.error('editMessageText xatosi:', err.message);
+      }
+    }
+    await ctx.reply(msg, opts);
+  };
+
+  try {
+    const result = await api.createOrderFromText({ telegram_chat_id: ctx.from.id, text });
+
+    if (result.needs_clarification) {
+      await sendResult(result.question || 'Muammoingizni batafsilroq yozib bering.', customerMenuKeyboard());
+      return;
+    }
+
+    if (result.manual_required) {
+      await sendResult(
+        "⚠️ Hozircha muammoingizni avtomatik aniqlay olmadim.\n\n" +
+          "Iltimos, ustaxonaga qo'ng'iroq qiling yoki birozdan so'ng qayta yozib ko'ring.",
+        customerMenuKeyboard()
+      );
+      return;
+    }
+
+    const urgency = URGENCY_LABELS[result.urgency] || '—';
+    const durationLine = result.estimated_duration_minutes
+      ? `\n⏱️ Taxminiy vaqt: ${result.estimated_duration_minutes} daqiqa`
+      : '';
+
+    await sendResult(
+      `✅ Buyurtmangiz qabul qilindi!\n\n` +
+        `🛠️ Xizmat: ${result.service_type}\n` +
+        `🔢 Navbat raqamingiz: #${result.queue_number}\n` +
+        `🚦 Shoshilinchlik: ${urgency}` +
+        durationLine +
+        `\n📌 Holat: ${STATUS_LABELS[result.status] || result.status}\n` +
+        `\nHolatingizni quyidagi tugma orqali kuzatib boring 👇`,
+      customerMenuKeyboard()
+    );
+  } catch (err) {
+    console.error('createOrderFromText xatolik:', err.message);
+    await sendResult(
+      "⚠️ Buyurtmani rasmiylashtirishda muammo yuz berdi.\n\nIltimos, ustaxonaga qo'ng'iroq qiling yoki keyinroq qayta urinib ko'ring.",
+      customerMenuKeyboard()
+    );
+  }
+}
+
 function registerCustomerHandlers(bot) {
   bot.command('order', handleOrderCommand);
   bot.command('status', handleStatusCommand);
   bot.command('cancel', handleCancelCommand);
   bot.action(/^menu_order$/, handleOrderCommand);
+  bot.action(/^menu_describe$/, handleDescribeCommand);
   bot.action(/^menu_status$/, handleStatusCommand);
   bot.action(/^menu_cancel$/, handleCancelCommand);
   bot.action(/^order_svc_(.+)/, handleServiceSelection);
+  bot.on('text', handleFreeText);
 }
 
 module.exports = { registerCustomerHandlers, customerMenuKeyboard, requireLinked };
