@@ -1,0 +1,10 @@
+{
+  "12345": {
+    "telegram_id": 12345,
+    "phone": "123",
+    "role": "customer",
+    "backend_user_id": "u-1",
+    "name": "Test User",
+    "linked_at": "2026-08-16T05:54:20.134Z"
+  }
+}
