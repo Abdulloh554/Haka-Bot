@@ -37,9 +37,14 @@ async function createOrder({ telegram_chat_id, service_id, description }) {
 }
 
 // Erkin matn asosida AI tasniflashi orqali buyurtma yaratadi.
-// Javob: orderSerializer | { needs_clarification, question } | { manual_required }
+// Javob: orderSerializer | { needs_clarification, question } | { manual_required } | { relevant: false }
+// AI tasnifi sekin bo'lishi mumkin — oddiy 15s o'rniga 30s beramiz.
 async function createOrderFromText({ telegram_chat_id, text }) {
-  const { data } = await client.post('/api/bot/orders/from_text/', { telegram_chat_id, text }, { headers: botHeaders() });
+  const { data } = await client.post(
+    '/api/bot/orders/from_text/',
+    { telegram_chat_id, text },
+    { headers: botHeaders(), timeout: 30000 }
+  );
   return data;
 }
 

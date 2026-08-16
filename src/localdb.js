@@ -51,4 +51,60 @@ function getLinkedUser(telegramId) {
   return matched || null;
 }
 
-module.exports = { saveLinkedUser, getLinkedUser };
+// ============ AI aniqlashtirish sessiyasi (vaqtinchalik holat) ============
+
+const pendingPath = path.join(__dirname, "..", "data", "pending_clarification.json");
+
+function readPending() {
+  ensureStorage();
+
+  try {
+    const raw = fs.readFileSync(pendingPath, "utf8");
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function writePending(pending) {
+  fs.mkdirSync(path.dirname(pendingPath), { recursive: true });
+  fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2), "utf8");
+}
+
+// Aniqlashtiruvchi savol yuborilgan mijozning original matnini saqlaydi.
+function setPendingClarification(telegramId, { original_text, question }) {
+  const pending = readPending();
+  pending[String(telegramId)] = {
+    original_text,
+    question,
+    created_at: new Date().toISOString(),
+  };
+  writePending(pending);
+}
+
+function getPendingClarification(telegramId) {
+  const pending = readPending();
+  const entry = pending[String(telegramId)];
+  if (!entry) return null;
+  // 30 daqiqadan eski bo'lsa tozalab, null qaytaramiz
+  const ageMs = Date.now() - new Date(entry.created_at).getTime();
+  if (ageMs > 30 * 60 * 1000) {
+    clearPendingClarification(telegramId);
+    return null;
+  }
+  return entry;
+}
+
+function clearPendingClarification(telegramId) {
+  const pending = readPending();
+  delete pending[String(telegramId)];
+  writePending(pending);
+}
+
+module.exports = {
+  saveLinkedUser,
+  getLinkedUser,
+  setPendingClarification,
+  getPendingClarification,
+  clearPendingClarification,
+};

@@ -1,6 +1,11 @@
 const { Markup } = require('telegraf');
 const api = require('./api');
-const { getLinkedUser } = require('./localdb');
+const {
+  getLinkedUser,
+  getPendingClarification,
+  setPendingClarification,
+  clearPendingClarification,
+} = require('./localdb');
 
 const STATUS_LABELS = {
   queued: '⏳ Navbatda',
@@ -138,6 +143,7 @@ const URGENCY_LABELS = {
 // "Muammoni yozish" tugmasi — mijozga erkin matn yozishni tushuntiradi
 async function handleDescribeCommand(ctx) {
   await ctx.answerCbQuery().catch(() => {});
+  clearPendingClarification(ctx.from.id);
   await ctx.reply(
     "✍️ Muammoingizni oddiy so'zlar bilan yozib yuboring, masalan:\n\n" +
       "«kranimdan suv tomchilayapti, ertaga kelib qarang»\n\n" +
@@ -151,6 +157,11 @@ async function handleFreeText(ctx) {
   if (!user || user.role !== 'customer') return;
   const text = (ctx.message.text || '').trim();
   if (!text || text.startsWith('/')) return;
+
+  // Aniqlashtiruvchi savolga javob kelayotgan bo'lsa — original matn bilan birlashtiramiz,
+  // shunda AI oldingi kontekst bilan tasniflaydi.
+  const pending = getPendingClarification(ctx.from.id);
+  const sendText = pending ? `${pending.original_text}\n\nQo'shimcha ma'lumot: ${text}` : text;
 
   let progress = null;
   try {
@@ -173,10 +184,24 @@ async function handleFreeText(ctx) {
   };
 
   try {
-    const result = await api.createOrderFromText({ telegram_chat_id: ctx.from.id, text });
+    const result = await api.createOrderFromText({ telegram_chat_id: ctx.from.id, text: sendText });
 
     if (result.needs_clarification) {
+      setPendingClarification(ctx.from.id, {
+        original_text: pending ? pending.original_text : text,
+        question: result.question,
+      });
       await sendResult(result.question || 'Muammoingizni batafsilroq yozib bering.', customerMenuKeyboard());
+      return;
+    }
+
+    clearPendingClarification(ctx.from.id);
+
+    if (result.relevant === false) {
+      await sendResult(
+        "😔 Afsus, biz bu turdagi ishni bajarmaymiz. Ustaxonamiz santexnika va elektr ishlari bilan shug'ullanadi.",
+        customerMenuKeyboard()
+      );
       return;
     }
 
